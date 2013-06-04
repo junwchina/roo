@@ -49,6 +49,35 @@ class Roo::Excel < Roo::GenericSpreadsheet
     @workbook.worksheets.collect {|worksheet| normalize_string(worksheet.name)}
   end
 
+  def each_row 
+    sheet ||= @default_sheet
+    validate_sheet!(sheet)
+
+    if @cells_read[sheet]
+      raise "sheet #{sheet} already read"
+    end
+
+    worksheet = @workbook.worksheet(sheet_no(sheet))
+    worksheet.each(0) do |row|
+      values = []
+      (0..row.size).each do |cell_index|
+        cell = row.at(cell_index)
+        next if cell.nil?  #skip empty cells
+        next if cell.class == Spreadsheet::Formula && cell.value.nil? # skip empty formula cells
+        value_type, v =
+          if date_or_time?(row, cell_index)
+            read_cell_date_or_time(row, cell_index)
+          else
+            read_cell(row, cell_index)
+          end
+        values[cell_index] = format_cell_value(value_type, v)
+      end #row
+
+      yield values
+    end # worksheet
+  end
+
+
   # returns the content of a cell. The upper left corner is (1,1) or ('A',1)
   def cell(row,col,sheet=nil)
     sheet ||= @default_sheet
@@ -197,24 +226,20 @@ class Roo::Excel < Roo::GenericSpreadsheet
     @cell[sheet]    = {} unless @cell[sheet]
     @fonts[sheet] = {} unless @fonts[sheet]
     @fonts[sheet][key] = font
+    
+    @cell[sheet][key] = format_cell_value(value_type, v)
+  end
 
-    @cell[sheet][key] =
-      case value_type
-      when :float
-        v.to_f
-      when :string
-        v
-      when :date
-        v
-      when :datetime
-        @cell[sheet][key] = DateTime.new(v.year,v.month,v.day,v.hour,v.min,v.sec)
-      when :percentage
-        v.to_f
-      when :time
-        v
-      else
-        v
-      end
+
+  def format_cell_value(value_type, v)
+    case value_type # @cell_type[sheet][key]
+    when :float, :percentage
+      v.to_f
+    when :datetime
+      DateTime.new(v.year,v.month,v.day,v.hour,v.min,v.sec)
+    else   #  :string, :date, :time and others
+      v
+    end
   end
 
   # ruby-spreadsheet has a font object so we're extending it
@@ -267,6 +292,8 @@ class Roo::Excel < Roo::GenericSpreadsheet
     end # worksheet
     @cells_read[sheet] = true
   end
+
+
 
   # Get the contents of a cell, accounting for the
   # way formula stores the value
