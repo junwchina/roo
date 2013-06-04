@@ -57,9 +57,11 @@ class Roo::Excel < Roo::GenericSpreadsheet
       raise "sheet #{sheet} already read"
     end
 
+    cols = 0
     worksheet = @workbook.worksheet(sheet_no(sheet))
     worksheet.each(0) do |row|
-      values = []
+      cols = [row.size, cols].max
+      values = Array.new(cols, nil)
       (0..row.size).each do |cell_index|
         cell = row.at(cell_index)
         next if cell.nil?  #skip empty cells
